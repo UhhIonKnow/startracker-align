@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astrophotography Target Finder</title>
+<style>
+body{font-family:Arial,sans-serif;background:#0b1020;color:#fff;margin:0;padding:20px}
+.container{max-width:1000px;margin:auto}
+.card{background:#151c33;padding:20px;border-radius:12px;margin-bottom:16px}
+input,button{width:100%;padding:10px;margin-top:8px;border-radius:8px;border:none}
+button{cursor:pointer}
+.result{margin:8px 0}
+#results div{padding:8px;cursor:pointer;border-bottom:1px solid #2a3358}
+#results div:hover{background:#222c4d}
+.small{color:#b8c0e0}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+</head>
+<body>
+<div class="container">
+<h1>Astrophotography Target Finder</h1>
+
+<div class="card">
+<label>Latitude</label>
+<input id="lat" type="number" step="0.000001" placeholder="-33.8688">
+
+<label>Longitude</label>
+<input id="lon" type="number" step="0.000001" placeholder="151.2093">
+
+<button onclick="getLocation()">Use My Location</button>
+</div>
+
+<div class="card">
+<label>Search Targets</label>
+<input id="search" oninput="searchTargets()" placeholder="M31, Carina, Omega Centauri...">
+<div id="results"></div>
+</div>
+
+<div class="card">
+<h2>Selected Target</h2>
+<div id="targetInfo">None selected</div>
+</div>
+
+<div class="card">
+<h2>Coordinates</h2>
+<div id="alt" class="result">Altitude: --</div>
+<div id="az" class="result">Azimuth: --</div>
+</div>
+</div>
+
+<script>
+const catalog = [
+{name:"Andromeda Galaxy", aliases:["M31","NGC 224"], ra:10.6847, dec:41.2690},
+{name:"Orion Nebula", aliases:["M42","NGC 1976"], ra:83.8221, dec:-5.3911},
+{name:"Pleiades", aliases:["M45"], ra:56.75, dec:24.1167},
+{name:"Lagoon Nebula", aliases:["M8"], ra:270.925, dec:-24.38},
+{name:"Trifid Nebula", aliases:["M20"], ra:270.66, dec:-23.02},
+{name:"Eagle Nebula", aliases:["M16"], ra:274.7, dec:-13.81},
+{name:"Omega Nebula", aliases:["M17"], ra:275.1, dec:-16.18},
+{name:"Carina Nebula", aliases:["NGC 3372"], ra:161.264, dec:-59.684},
+{name:"Eta Carinae", aliases:["Eta Car"], ra:161.264, dec:-59.684},
+{name:"Omega Centauri", aliases:["NGC 5139"], ra:201.697, dec:-47.479},
+{name:"47 Tucanae", aliases:["NGC 104"], ra:6.024, dec:-72.081},
+{name:"Tarantula Nebula", aliases:["30 Doradus"], ra:84.675, dec:-69.1},
+{name:"Jewel Box", aliases:["NGC 4755"], ra:193.62, dec:-60.36},
+{name:"Helix Nebula", aliases:["NGC 7293"], ra:337.404, dec:-20.837},
+{name:"Rosette Nebula", aliases:["NGC 2237"], ra:97.95, dec:4.95},
+{name:"Horsehead Nebula", aliases:["Barnard 33"], ra:85.25, dec:-2.46},
+{name:"Flame Nebula", aliases:["NGC 2024"], ra:85.42, dec:-1.94},
+{name:"Southern Pinwheel Galaxy", aliases:["M83"], ra:204.25, dec:-29.87},
+{name:"Centaurus A", aliases:["NGC 5128"], ra:201.36, dec:-43.02},
+{name:"Large Magellanic Cloud", aliases:["LMC"], ra:80.894, dec:-69.756},
+{name:"Small Magellanic Cloud", aliases:["SMC"], ra:13.186, dec:-72.828}
+];
+
+let selected = null;
+
+function getLocation(){
+ navigator.geolocation.getCurrentPosition(p=>{
+   lat.value=p.coords.latitude;
+   lon.value=p.coords.longitude;
+ });
+}
+
+function searchTargets(){
+ const q=search.value.toLowerCase();
+ results.innerHTML="";
+ if(!q) return;
+
+ const matches=catalog.filter(o=>
+   o.name.toLowerCase().includes(q) ||
+   o.aliases.some(a=>a.toLowerCase().includes(q))
+ ).slice(0,20);
+
+ matches.forEach(m=>{
+   const d=document.createElement("div");
+   d.textContent=`${m.name} (${m.aliases.join(", ")})`;
+   d.onclick=()=>selectTarget(m);
+   results.appendChild(d);
+ });
+}
+
+function selectTarget(obj){
+ selected=obj;
+ targetInfo.innerHTML=`
+ <strong>${obj.name}</strong><br>
+ Aliases: ${obj.aliases.join(", ")}<br>
+ RA: ${obj.ra}°<br>
+ Dec: ${obj.dec}°`;
+ results.innerHTML="";
+ search.value=obj.name;
+ calculate();
+}
+
+function calculate(){
+ if(!selected) return;
+ const latitude=parseFloat(lat.value);
+ const longitude=parseFloat(lon.value);
+ if(isNaN(latitude)||isNaN(longitude)) return;
+
+ const observer=new Astronomy.Observer(latitude,longitude,0);
+ const now=new Astronomy.AstroTime(new Date());
+
+ const hor=Astronomy.Horizon(
+   now, observer,
+   selected.ra/15.0,
+   selected.dec,
+   "normal"
+ );
+
+ alt.textContent=`Altitude: ${hor.altitude.toFixed(2)}°`;
+ az.textContent=`Azimuth: ${hor.azimuth.toFixed(2)}°`;
+}
+
+setInterval(calculate,1000);
+</script>
+</body>
+</html>
