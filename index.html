@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Tracker Alignment Tool</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:#111;
+    color:white;
+    margin:0;
+    padding:20px;
+}
+
+.container{
+    max-width:900px;
+    margin:auto;
+}
+
+.card{
+    background:#1e1e1e;
+    padding:20px;
+    border-radius:12px;
+    margin-bottom:20px;
+}
+
+h1{
+    text-align:center;
+}
+
+input,button{
+    width:100%;
+    padding:12px;
+    margin-top:8px;
+    margin-bottom:15px;
+    border:none;
+    border-radius:8px;
+}
+
+button{
+    background:#2d7cff;
+    color:white;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#1f5fd1;
+}
+
+.result{
+    font-size:1.2rem;
+    margin:8px 0;
+}
+
+.small{
+    color:#aaa;
+    font-size:0.9rem;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Star Tracker Alignment Tool</h1>
+
+<div class="card">
+
+<h2>Observer Location</h2>
+
+<label>Latitude</label>
+<input id="latitude" type="number" step="0.000001" placeholder="-33.8688">
+
+<label>Longitude</label>
+<input id="longitude" type="number" step="0.000001" placeholder="151.2093">
+
+<label>Elevation (metres)</label>
+<input id="elevation" type="number" value="0">
+
+<button onclick="getLocation()">
+Use My Location
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Target Search</h2>
+
+<input
+id="targetInput"
+type="text"
+placeholder="M31, Andromeda Galaxy, Horsehead Nebula, NGC 3372..."
+>
+
+<button onclick="searchTarget()">
+Search Target
+</button>
+
+<p id="targetName">
+No target selected
+</p>
+
+</div>
+
+<div class="card">
+
+<h2>Raw Coordinates</h2>
+
+<div class="result" id="rawAltitude">
+Altitude: --
+</div>
+
+<div class="result" id="rawAzimuth">
+Azimuth: --
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>True Coordinates</h2>
+
+<div class="result" id="trueAltitude">
+Altitude: --
+</div>
+
+<div class="result" id="trueAzimuth">
+Azimuth: --
+</div>
+
+<div class="result" id="magDeclination">
+Magnetic Declination: --
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Target Information</h2>
+
+<div id="targetInfo">
+Waiting for target...
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+let currentTarget = null;
+
+async function getLocation() {
+
+    if (!navigator.geolocation) {
+        alert("Geolocation not supported");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(position => {
+
+        document.getElementById("latitude").value =
+            position.coords.latitude;
+
+        document.getElementById("longitude").value =
+            position.coords.longitude;
+
+        document.getElementById("elevation").value =
+            position.coords.altitude || 0;
+
+    });
+
+}
+
+async function searchTarget() {
+
+    const query =
+        document.getElementById("targetInput").value.trim();
+
+    if (!query) {
+        alert("Enter a target");
+        return;
+    }
+
+    try {
+
+        const url =
+            "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/" +
+            encodeURIComponent(query);
+
+        const response =
+            await fetch(url);
+
+        const xml =
+            await response.text();
+
+        const parser =
+            new DOMParser();
+
+        const doc =
+            parser.parseFromString(xml,"text/xml");
+
+        const raNode =
+            doc.querySelector("jradeg");
+
+        const decNode =
+            doc.querySelector("jdedeg");
+
+        if (!raNode || !decNode) {
+
+            alert("Target not found");
+
+            return;
+        }
+
+        const ra =
+            parseFloat(raNode.textContent);
+
+        const dec =
+            parseFloat(decNode.textContent);
+
+        const nameNode =
+            doc.querySelector("oname");
+
+        const targetName =
+            nameNode
+            ? nameNode.textContent
+            : query;
+
+        currentTarget = {
+            name: targetName,
+            ra,
+            dec
+        };
+
+        document.getElementById("targetName").innerHTML =
+            "<strong>" + targetName + "</strong>";
+
+        document.getElementById("targetInfo").innerHTML =
+            `
+            RA: ${ra.toFixed(5)}°<br>
+            Dec: ${dec.toFixed(5)}°
+            `;
+
+        calculate();
+
+    } catch(err) {
+
+        console.error(err);
+
+        alert(
+            "Search failed. Some astronomy services may block direct browser requests. For production, use a backend proxy."
+        );
+
+    }
+}
+
+async function calculate() {
+
+    if (!currentTarget)
+        return;
+
+    const lat =
+        parseFloat(
+            document.getElementById("latitude").value
+        );
+
+    const lon =
+        parseFloat(
+            document.getElementById("longitude").value
+        );
+
+    const elevation =
+        parseFloat(
+            document.getElementById("elevation").value
+        );
+
+    if (
+        isNaN(lat) ||
+        isNaN(lon)
+    ) {
+        return;
+    }
+
+    try {
+
+        const observer =
+            new Astronomy.Observer(
+                lat,
+                lon,
+                elevation
+            );
+
+        const now =
+            new Astronomy.AstroTime(
+                new Date()
+            );
+
+        const horizontal =
+            Astronomy.Horizon(
+                now,
+                observer,
+                currentTarget.ra,
+                currentTarget.dec,
+                "normal"
+            );
+
+        const altitude =
+            horizontal.altitude;
+
+        const azimuth =
+            horizontal.azimuth;
+
+        let declination = 0;
+
+        try {
+
+            const magResponse =
+                await fetch(
+                    `https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=${lat}&lon1=${lon}&resultFormat=json`
+                );
+
+            const magData =
+                await magResponse.json();
+
+            if (
+                magData &&
+                magData.result &&
+                magData.result.length
+            ) {
+
+                declination =
+                    parseFloat(
+                        magData.result[0].declination
+                    );
+            }
+
+        } catch(e) {
+
+            console.log(
+                "Declination lookup unavailable"
+            );
+
+        }
+
+        const correctedAzimuth =
+            azimuth - declination;
+
+        document.getElementById("rawAltitude").innerText =
+            "Altitude: " +
+            altitude.toFixed(2) +
+            "°";
+
+        document.getElementById("rawAzimuth").innerText =
+            "Azimuth: " +
+            azimuth.toFixed(2) +
+            "°";
+
+        document.getElementById("trueAltitude").innerText =
+            "Altitude: " +
+            altitude.toFixed(2) +
+            "°";
+
+        document.getElementById("trueAzimuth").innerText =
+            "Azimuth: " +
+            correctedAzimuth.toFixed(2) +
+            "°";
+
+        document.getElementById("magDeclination").innerText =
+            "Magnetic Declination: " +
+            declination.toFixed(2) +
+            "°";
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+}
+
+setInterval(calculate,1000);
+
+</script>
+
+</body>
+</html>
